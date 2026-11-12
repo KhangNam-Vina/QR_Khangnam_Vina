@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QR Studio Khang Nam - Tạo mã QR miễn phí</title>
+  <meta name="description" content="Tạo mã QR website, số điện thoại, QR có logo và tải PNG miễn phí." />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #16213b; background: #f4f7fc; }
@@ -50,6 +51,8 @@
     .result-name { font-weight: 750; margin: 15px 0 3px; overflow-wrap: anywhere; }
     .result-info { color: #718098; font-size: 13px; margin: 0 0 13px; }
     .actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .actions a { text-decoration: none; }
+    .mini-actions a { display: inline-flex; align-items: center; text-decoration: none; }
     .tip { margin: 17px 0 0; font-size: 12px; line-height: 1.6; color: #8b96ab; }
     .history-list { display: grid; gap: 11px; margin-top: 16px; }
     .history-item { display: grid; grid-template-columns: 56px minmax(0,1fr) auto; gap: 12px; align-items: center; border: 1px solid #e1e8f3; border-radius: 14px; padding: 10px; }
@@ -58,7 +61,7 @@
     .history-meta strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
     .history-meta small { display: block; color: #7d899f; margin-top: 4px; font-size: 12px; }
     .mini-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: end; }
-    .mini-actions button { background: #f1f4ff; color: #4355a6; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 700; }
+    .mini-actions button, .mini-actions a { font: inherit; font-size: 13px; background: #f1f4ff; color: #4355a6; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 700; }
     .mini-actions .remove { background: #fff0f1; color: #b62e3b; }
     .history-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
     .history-tools p { margin: 0; color: #7b869a; font-size: 13px; }
@@ -71,6 +74,7 @@
 <body>
   <div class="shell">
     <header>
+      <div class="eyebrow">QR Studio • Khang Nam Vina</div>
       <h1>Tạo QR theo cách của ChungChienne</h1>
     </header>
 
@@ -144,7 +148,11 @@
         <div class="result" id="resultActions" hidden>
           <p class="result-name" id="resultName"></p>
           <p class="result-info" id="resultInfo"></p>
-          <div class="actions"><button class="button" id="downloadBtn" type="button">⬇ Tải ảnh PNG</button></div>
+          <div class="actions">
+            <a class="button" id="downloadBtn" href="#" download="QR-Studio.png">⬇ Tải ảnh PNG</a>
+            <a class="button secondary" id="openImageBtn" href="#" target="_blank" rel="noopener noreferrer">↗ Mở ảnh để lưu</a>
+          </div>
+          <p class="tip" style="text-align:center">Nếu trình duyệt không tải trực tiếp, bấm <strong>Mở ảnh để lưu</strong>, sau đó nhấn chuột phải hoặc giữ ảnh để lưu về máy.</p>
         </div>
         <p class="tip">QR website mở đường link; QR điện thoại chứa lệnh gọi tel:; QR logo cũng mở đường link. Hãy dùng camera điện thoại thử quét trước khi chia sẻ.</p>
       </aside>
@@ -161,6 +169,8 @@
     const QR_MARGIN = 48;
     const TYPE_LABELS = { website: "Website", phone: "Điện thoại", logo: "QR có logo" };
     let current = null;
+    let previewBlobURL = null;
+    let historyBlobURLs = [];
     let historyItems = loadHistory();
 
     const el = id => document.getElementById(id);
@@ -222,14 +232,41 @@
       historyItems = historyItems.slice(0, 20);
       persistHistory();
     }
+    // Tạo Blob PNG để trình duyệt tải file thật, thay vì click data: URL
+    // (data: URL đôi khi bị hạn chế khi download trên một số trình duyệt).
+    function pngBlobFromDataURL(dataUrl) {
+      const marker = "base64,";
+      const pos = dataUrl.indexOf(marker);
+      if (!dataUrl.startsWith("data:image/png;") || pos < 0) {
+        throw new Error("Dữ liệu PNG không hợp lệ.");
+      }
+      const binary = atob(dataUrl.slice(pos + marker.length));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: "image/png" });
+    }
+    function pngFileName(item) {
+      const date = new Date(item.createdAt || Date.now());
+      const pad = n => String(n).padStart(2, "0");
+      return `QR-${item.type}-${date.getFullYear()}${pad(date.getMonth()+1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}.png`;
+    }
     function showPreview(item) {
+      // Đưa link tải trực tiếp vào thẻ <a download>, không phụ thuộc vào JS click giả lập.
+      const nextUrl = URL.createObjectURL(pngBlobFromDataURL(item.dataUrl));
+      const oldUrl = previewBlobURL;
+      previewBlobURL = nextUrl;
       current = item;
+      const downloadLink = el("downloadBtn");
+      downloadLink.href = nextUrl;
+      downloadLink.download = pngFileName(item);
+      el("openImageBtn").href = nextUrl;
       el("previewImage").src = item.dataUrl;
       el("resultName").textContent = item.title;
       el("resultInfo").textContent = TYPE_LABELS[item.type] || "QR Code";
       el("emptyPreview").hidden = true;
       el("resultPreview").hidden = false;
       el("resultActions").hidden = false;
+      if (oldUrl) URL.revokeObjectURL(oldUrl);
     }
     function getQRCodeCanvas(text) {
       if (typeof QRCode === "undefined") {
@@ -342,15 +379,11 @@
       });
     });
     el("downloadBtn").addEventListener("click", () => {
-      if (!current) return;
-      const a = document.createElement("a");
-      a.href = current.dataUrl;
-      a.download = `qr-${current.type}-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      showStatus("Đã yêu cầu trình duyệt tải ảnh PNG. Nếu không thấy file, chọn 'Mở ảnh để lưu' ngay bên cạnh.", true);
     });
     function renderHistory() {
+      historyBlobURLs.forEach(url => URL.revokeObjectURL(url));
+      historyBlobURLs = [];
       const list = el("historyList");
       list.replaceChildren();
       el("historyCount").textContent = `${historyItems.length} mã QR đã lưu (tối đa 20)`;
@@ -394,7 +427,13 @@
           renderHistory();
           showStatus("Đã xóa mã QR khỏi lịch sử.", true);
         });
-        actions.append(open, remove);
+        const save = document.createElement("a");
+        save.textContent = "⬇ PNG";
+        save.href = URL.createObjectURL(pngBlobFromDataURL(item.dataUrl));
+        save.download = pngFileName(item);
+        save.setAttribute("aria-label", "Tải PNG của mã " + item.title);
+        historyBlobURLs.push(save.href);
+        actions.append(open, save, remove);
         row.append(img, meta, actions);
         list.appendChild(row);
       }
